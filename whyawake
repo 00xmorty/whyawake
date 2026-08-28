@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Explain macOS sleep blockers and recent wake clues, read-only."""
+from __future__ import annotations
+
+import argparse
+import collections
+import json
+import platform
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+VERSION = "0.1.0"
+ASSERTION_RE = re.compile(r"pid\s+(\d+)\(([^)]+)\).*?named:\s*['\"]?([^'\"]+)", re.I)
+WAKE_PATTERNS = (
+    re.compile(r"Wake reason:\s*(.+)", re.I),
+    re.compile(r"(?:DarkWake|Wake)\s+from\s+.+?due to\s+([^\s/]+)", re.I),
+)
+
+
+def read_text(path: str | None, command: list[str]) -> str:
+    if path:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    if platform.system() != "Darwin":
+        return ""
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    return result.stdout
+
+
+def parse_assertions(text: str) -> list[dict[str, str]]:
+    found = []
+    for line in text.splitlines():
+        match = ASSERTION_RE.search(line)
+        if match:
+            found.append({"pid": match.group(1), "process": match.group(2),
+                          "assertion": match.group(3).strip()})
+    return found
+
+
+def parse_wakes(text: str) -> list[dict[str, object]]:
+    counts: collections.Counter[str] = collections.Counter()
+    for line in text.splitlines():
+        for pattern in WAKE_PATTERNS:
+            match = pattern.search(line)
+            if match:
+                reason = match.group(1).strip().rstrip(".")
+                if reason:
+                    counts[reason] += 1
+                break
+    return [{"reason": reason, "count": count} for reason, count in counts.most_common()]
+
+
+def guidance(reason: str) -> str:
+    lowered = reason.lower()
+    if any(word in lowered for word in ("bluetooth", "wifibt", "rtc", "network")):
+        return "Check Bluetooth/network wake settings and disconnect accessories one at a time."
+    if any(word in lowered for word in ("usb", "xhci", "ec.usb")):
+        return "Disconnect one USB device at a time and compare a later report."
+    if "tcpkeepalive" in lowered or "maintenance" in lowered:
+        return "This may be scheduled maintenance; compare frequency before changing settings."
+    return "Treat this as a clue; correlate it with time, apps, and connected devices."
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Read-only macOS sleep and wake explainer")
+    parser.add_argument("--assertions-file", help="parse saved pmset -g assertions output")
+    parser.add_argument("--log-file", help="parse saved pmset -g log output")
+    parser.add_argument("--json", action="store_true", help="emit JSON")
+    parser.add_argument("--version", action="version", version=f"whyawake {VERSION}")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if platform.system() != "Darwin" and not (args.assertions_file or args.log_file):
+        print("whyawake: live inspection requires macOS; use fixture file options", file=sys.stderr)
+        return 2
+    try:
+        assertion_text = read_text(args.assertions_file, ["pmset", "-g", "assertions"])
+        log_text = read_text(args.log_file, ["pmset", "-g", "log"])
+    except OSError as exc:
+        print(f"whyawake: cannot read input: {exc}", file=sys.stderr)
+        return 2
+    blockers = parse_assertions(assertion_text)
+    wakes = parse_wakes(log_text)
+    report = {"read_only": True, "sleep_blockers": blockers, "wake_reasons": wakes}
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+    print("WhyAwake (read-only)")
+    print(f"Active sleep blocker clues: {len(blockers)}")
+    for item in blockers:
+        print(f"- {item['process']} (pid {item['pid']}): {item['assertion']}")
+    if not blockers:
+        print("- No named process assertion found in the available output.")
+    print(f"Wake reason groups: {len(wakes)}")
+    for item in wakes:
+        print(f"- {item['reason']} — {item['count']} event(s)")
+        print(f"  Next: {guidance(str(item['reason']))}")
+    if not wakes:
+        print("- No wake reason found in the available output.")
+    print("Nothing was changed. Clues are not proof of a faulty app or device.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

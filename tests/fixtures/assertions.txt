@@ -1,0 +1,6 @@
+2026-08-28 20:00:00 +0200
+Assertion status system-wide:
+   PreventUserIdleSystemSleep    1
+Listed by owning process:
+   pid 424(zoom.us): [0x0000000000000001] 00:04:12 PreventUserIdleSystemSleep named: 'Zoom Meeting audio'
+   pid 912(caffeinate): [0x0000000000000002] 00:00:03 PreventUserIdleSystemSleep named: "caffeinate command-line tool"
