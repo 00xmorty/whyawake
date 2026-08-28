@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 ASSERTION_RE = re.compile(r"pid\s+(\d+)\(([^)]+)\).*?named:\s*['\"]?([^'\"]+)", re.I)
 WAKE_PATTERNS = (
     re.compile(r"Wake reason:\s*(.+)", re.I),
@@ -55,7 +55,7 @@ def guidance(reason: str) -> str:
     lowered = reason.lower()
     if any(word in lowered for word in ("bluetooth", "wifibt", "rtc", "network")):
         return "Check Bluetooth/network wake settings and disconnect accessories one at a time."
-    if any(word in lowered for word in ("usb", "xhci", "ec.usb")):
+    if any(word in lowered for word in ("usb", "xhc", "xhci", "ec.usb")):
         return "Disconnect one USB device at a time and compare a later report."
     if "tcpkeepalive" in lowered or "maintenance" in lowered:
         return "This may be scheduled maintenance; compare frequency before changing settings."

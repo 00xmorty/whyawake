@@ -1,6 +1,6 @@
-# v0.1.0
+# v0.1.1
 
-Initial release.
+Patch release: recognize `XHC*` wake reasons as USB-controller clues so the printed next check matches the documented behavior.
 
 - Reads current named sleep assertions from `pmset -g assertions`.
 - Groups wake clues from `pmset -g log`.
