@@ -1,0 +1,12 @@
+WhyAwake (read-only)
+Active sleep blocker clues: 2
+- zoom.us (pid 424): Zoom Meeting audio
+- caffeinate (pid 912): caffeinate command-line tool
+Wake reason groups: 3
+- EC.DarkPME (Maintenance) — 2 event(s)
+  Next: This may be scheduled maintenance; compare frequency before changing settings.
+- XHC1 — 1 event(s)
+  Next: Disconnect one USB device at a time and compare a later report.
+- RTC — 1 event(s)
+  Next: Check Bluetooth/network wake settings and disconnect accessories one at a time.
+Nothing was changed. Clues are not proof of a faulty app or device.

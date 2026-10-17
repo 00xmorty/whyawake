@@ -1,14 +1,26 @@
 # WhyAwake
 
-WhyAwake turns macOS `pmset` sleep assertions and wake logs into a compact, readable report. It groups repeated wake clues and shows which named processes currently claim to prevent idle system sleep.
+WhyAwake helps Mac users investigate sleep blockers and repeated wake reasons without changing power settings.
 
-## Run
+![Terminal demo — example output](https://github.com/00xmorty/whyawake/releases/download/v0.1.1/whyawake-demo.gif)
 
-Requires macOS and Python 3 (included with Xcode Command Line Tools or install separately).
+## Why this tool
+
+Reading `pmset -g assertions` and `pmset -g log` by hand means matching process assertions to repeated wake messages. WhyAwake groups wake clues and lists named processes currently claiming to prevent idle sleep in a compact report; it does not change power settings or prove a cause.
+
+## Install
+
+In an empty directory, download the single executable release asset and make it executable:
 
 ```sh
-curl -LO https://github.com/00xmorty/whyawake/releases/latest/download/whyawake
-chmod +x whyawake
+curl -fsSLO https://github.com/00xmorty/whyawake/releases/download/v0.1.1/whyawake && chmod +x whyawake
+```
+
+This downloads a file; it does not execute a remote install script or change your PATH. Review it before running. [Release and asset](https://github.com/00xmorty/whyawake/releases/tag/v0.1.1) · [Source](./whyawake).
+
+## Usage
+
+```sh
 ./whyawake
 ```
 
@@ -26,15 +38,22 @@ pmset -g log > pmset-log.txt
 ./whyawake --assertions-file assertions.txt --log-file pmset-log.txt
 ```
 
-## Example
+## Example output
+
+Illustrative fixture data; paths, process IDs, timings and sizes are examples, not claims about your Mac.
 
 ```text
 WhyAwake (read-only)
-Active sleep blocker clues: 1
+Active sleep blocker clues: 2
 - zoom.us (pid 424): Zoom Meeting audio
-Wake reason groups: 1
-- XHC1 — 3 event(s)
+- caffeinate (pid 912): caffeinate command-line tool
+Wake reason groups: 3
+- EC.DarkPME (Maintenance) — 2 event(s)
+  Next: This may be scheduled maintenance; compare frequency before changing settings.
+- XHC1 — 1 event(s)
   Next: Disconnect one USB device at a time and compare a later report.
+- RTC — 1 event(s)
+  Next: Check Bluetooth/network wake settings and disconnect accessories one at a time.
 Nothing was changed. Clues are not proof of a faulty app or device.
 ```
 
@@ -52,10 +71,19 @@ Nothing was changed. Clues are not proof of a faulty app or device.
 - Named assertions may omit blockers that macOS reports only in summary form.
 - Live inspection is macOS-only. Saved-input parsing is supported on macOS and Linux.
 
+## Requirements
+
+- Tested on macOS 26.6.2.
+- Python 3.9+ with the standard library and macOS `pmset`; Python 3.9 tested.
+- Saved-input parsing also works on Linux.
+- Single executable file; no sudo or package manager is needed to run it.
+
 ## Development
 
 ```sh
 bash tests/test.sh
 ```
 
-MIT licensed.
+## License
+
+[MIT](LICENSE).
