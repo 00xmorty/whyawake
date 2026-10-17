@@ -1,56 +1,59 @@
-# WhyAwake
+WhyAwake helps Mac users investigate sleep blockers and repeated wake reasons without changing power settings.
 
-WhyAwake turns macOS `pmset` sleep assertions and wake logs into a compact, readable report. It groups repeated wake clues and shows which named processes currently claim to prevent idle system sleep.
+# whyawake
 
-## Run
+![Terminal demo — example output](https://github.com/00xmorty/whyawake/releases/download/v0.1.1/whyawake-demo.gif)
 
-Requires macOS and Python 3 (included with Xcode Command Line Tools or install separately).
+## Install
+
+In an empty directory, download the single executable release asset and make it executable:
 
 ```sh
-curl -LO https://github.com/00xmorty/whyawake/releases/latest/download/whyawake
-chmod +x whyawake
+curl -fsSLO https://github.com/00xmorty/whyawake/releases/download/v0.1.1/whyawake && chmod +x whyawake
+```
+
+This downloads a file; it does not execute a remote install script or change your PATH. Review it before running. [Release and asset](https://github.com/00xmorty/whyawake/releases/tag/v0.1.1) · [Source](./whyawake).
+
+## Usage
+
+```sh
 ./whyawake
-```
-
-JSON output:
-
-```sh
 ./whyawake --json
+./whyawake --assertions-file tests/fixtures/assertions.txt --log-file tests/fixtures/log.txt
 ```
 
-Analyze previously saved outputs (also works on Linux):
+## Example output
 
-```sh
-pmset -g assertions > assertions.txt
-pmset -g log > pmset-log.txt
-./whyawake --assertions-file assertions.txt --log-file pmset-log.txt
-```
-
-## Example
+Illustrative fixture data; paths, process IDs, timings and sizes are examples, not claims about your Mac.
 
 ```text
 WhyAwake (read-only)
-Active sleep blocker clues: 1
+Active sleep blocker clues: 2
 - zoom.us (pid 424): Zoom Meeting audio
-Wake reason groups: 1
-- XHC1 — 3 event(s)
+- caffeinate (pid 912): caffeinate command-line tool
+Wake reason groups: 3
+- EC.DarkPME (Maintenance) — 2 event(s)
+  Next: This may be scheduled maintenance; compare frequency before changing settings.
+- XHC1 — 1 event(s)
   Next: Disconnect one USB device at a time and compare a later report.
+- RTC — 1 event(s)
+  Next: Check Bluetooth/network wake settings and disconnect accessories one at a time.
 Nothing was changed. Clues are not proof of a faulty app or device.
 ```
 
-## Safety
+## Requirements
 
-- Strictly read-only: no `sudo`, settings writes, process kills, sleep/wake actions, network requests, or telemetry.
-- Suggested checks are manual, reversible observations; WhyAwake never executes them.
-- Review output before sharing. It can contain process names, PIDs, timestamps, hardware hints, and activity patterns.
+- macOS 26.6.2 verified; older releases have not been verified in this preparation pass.
+- Python 3 with the standard library and macOS pmset. Fixture parsing also runs on Linux. Python 3.9 is verified on M4.
+- No sudo or package manager is required to run the diagnostic.
 
-## Limitations
+## Safety and limits
 
-- A `pmset` reason is a correlation clue, not proof that an app, accessory, or subsystem is defective.
-- Log wording varies by macOS and hardware. Unknown formats may not be counted.
-- The MVP reads the full available `pmset -g log`; it does not apply an exact time window.
-- Named assertions may omit blockers that macOS reports only in summary form.
-- Live inspection is macOS-only. Saved-input parsing is supported on macOS and Linux.
+Read-only diagnostics: no deletion, settings changes, background agent, process termination or automatic repair. It does not read file contents (except explicitly supplied saved pmset text). No telemetry or network calls are made by the diagnostic. Downloading with curl is a separate install step.
+
+Wake reasons are correlation clues, not proof of a faulty device or application. Log formats differ across macOS releases; unknown formats may be missed. It reads the available pmset log, not an exact time window.
+
+Review reports before sharing: process names, IDs and activity patterns may be sensitive. The GIF uses illustrative data; sample/fixture mode does not diagnose your current machine.
 
 ## Development
 
@@ -58,4 +61,6 @@ Nothing was changed. Clues are not proof of a faulty app or device.
 bash tests/test.sh
 ```
 
-MIT licensed.
+## License
+
+[MIT](LICENSE).
