@@ -1,8 +1,12 @@
+# WhyAwake
+
 WhyAwake helps Mac users investigate sleep blockers and repeated wake reasons without changing power settings.
 
-# whyawake
-
 ![Terminal demo — example output](https://github.com/00xmorty/whyawake/releases/download/v0.1.1/whyawake-demo.gif)
+
+## Why this tool
+
+Reading `pmset -g assertions` and `pmset -g log` by hand means matching process assertions to repeated wake messages. WhyAwake groups wake clues and lists named processes currently claiming to prevent idle sleep in a compact report; it does not change power settings or prove a cause.
 
 ## Install
 
@@ -18,8 +22,20 @@ This downloads a file; it does not execute a remote install script or change you
 
 ```sh
 ./whyawake
+```
+
+JSON output:
+
+```sh
 ./whyawake --json
-./whyawake --assertions-file tests/fixtures/assertions.txt --log-file tests/fixtures/log.txt
+```
+
+Analyze previously saved outputs (also works on Linux):
+
+```sh
+pmset -g assertions > assertions.txt
+pmset -g log > pmset-log.txt
+./whyawake --assertions-file assertions.txt --log-file pmset-log.txt
 ```
 
 ## Example output
@@ -41,19 +57,26 @@ Wake reason groups: 3
 Nothing was changed. Clues are not proof of a faulty app or device.
 ```
 
+## Safety
+
+- Strictly read-only: no `sudo`, settings writes, process kills, sleep/wake actions, network requests, or telemetry.
+- Suggested checks are manual, reversible observations; WhyAwake never executes them.
+- Review output before sharing. It can contain process names, PIDs, timestamps, hardware hints, and activity patterns.
+
+## Limitations
+
+- A `pmset` reason is a correlation clue, not proof that an app, accessory, or subsystem is defective.
+- Log wording varies by macOS and hardware. Unknown formats may not be counted.
+- The MVP reads the full available `pmset -g log`; it does not apply an exact time window.
+- Named assertions may omit blockers that macOS reports only in summary form.
+- Live inspection is macOS-only. Saved-input parsing is supported on macOS and Linux.
+
 ## Requirements
 
-- macOS 26.6.2 verified; older releases have not been verified in this preparation pass.
-- Python 3 with the standard library and macOS pmset. Fixture parsing also runs on Linux. Python 3.9 is verified on M4.
-- No sudo or package manager is required to run the diagnostic.
-
-## Safety and limits
-
-Read-only diagnostics: no deletion, settings changes, background agent, process termination or automatic repair. It does not read file contents (except explicitly supplied saved pmset text). No telemetry or network calls are made by the diagnostic. Downloading with curl is a separate install step.
-
-Wake reasons are correlation clues, not proof of a faulty device or application. Log formats differ across macOS releases; unknown formats may be missed. It reads the available pmset log, not an exact time window.
-
-Review reports before sharing: process names, IDs and activity patterns may be sensitive. The GIF uses illustrative data; sample/fixture mode does not diagnose your current machine.
+- Tested on macOS 26.6.2.
+- Python 3.9+ with the standard library and macOS `pmset`; Python 3.9 tested.
+- Saved-input parsing also works on Linux.
+- Single executable file; no sudo or package manager is needed to run it.
 
 ## Development
 
