@@ -1,12 +1,35 @@
-WhyAwake (read-only)
+WhyAwake 0.2.0 (read-only)
 Active sleep blocker clues: 2
 - zoom.us (pid 424): Zoom Meeting audio
 - caffeinate (pid 912): caffeinate command-line tool
-Wake reason groups: 3
+Wake reason groups: 6
 - EC.DarkPME (Maintenance) — 2 event(s)
-  Next: This may be scheduled maintenance; compare frequency before changing settings.
+  Cause: platform maintenance wake (DarkWake)
+  Candidate setting to compare: powernap, standby (not a verified cause)
+  Next: Treat as housekeeping clue; compare counts across nights.
+- NUB.SPMISw3IRQ — 1 event(s)
+  Cause: SleepService maintenance (system housekeeping)
+  Candidate setting to compare: powernap (not a verified cause)
+  Next: Low-count maintenance wakes are normal; compare before changing powernap.
 - XHC1 — 1 event(s)
+  Cause: a USB device woke the Mac
   Next: Disconnect one USB device at a time and compare a later report.
-- RTC — 1 event(s)
-  Next: Check Bluetooth/network wake settings and disconnect accessories one at a time.
-Nothing was changed. Clues are not proof of a faulty app or device.
+- RTC/Maintenance — 1 event(s)
+  Cause: scheduled alarm/maintenance wake
+  Candidate setting to compare: powernap, scheduled events (not a verified cause)
+  Next: Check `pmset -g sched` and Time Machine schedule; this is often expected.
+- SMC.OutboxNotEmpty — 1 event(s)
+  Cause: radio traffic (Wi-Fi/Bluetooth) arrived while asleep
+  Candidate setting to compare: tcpkeepalive, networkoversleep (not a verified cause)
+  Next: Compare one night with Wi-Fi off; do not change settings from a single report.
+- EC.RTC (Alarm) — 1 event(s)
+  Cause: scheduled alarm/maintenance wake
+  Candidate setting to compare: powernap, scheduled events (not a verified cause)
+  Next: Check `pmset -g sched` and Time Machine schedule; this is often expected.
+Window: last 7 day(s) — 7 event(s) from 2026-08-23T02:00 to 2026-08-28T04:30
+Nights with wakes: 3
+- night of 2026-08-22: 1 event(s)
+- night of 2026-08-26: 4 event(s)
+- night of 2026-08-27: 2 event(s)
+Overnight wakes (22:00-07:00): 7
+Nothing was changed. Clues are not proof of a faulty app, device, or subsystem.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import datetime as dt
 import json
 import platform
 import re
@@ -11,11 +12,96 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.1.1"
+VERSION = "0.2.0"
+STAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
 ASSERTION_RE = re.compile(r"pid\s+(\d+)\(([^)]+)\).*?named:\s*['\"]?([^'\"]+)", re.I)
 WAKE_PATTERNS = (
-    re.compile(r"Wake reason:\s*(.+)", re.I),
-    re.compile(r"(?:DarkWake|Wake)\s+from\s+.+?due to\s+([^\s/]+)", re.I),
+    re.compile(r"Wake reason:\s*(.+?)\s*$", re.I),
+    re.compile(r"(?:DarkWake|Wake)\s+from\s+.+?due to\s+([^\s/]+(?:/[^\s/]+)?)", re.I),
+)
+
+# "due to" token -> (plain-language cause, pmset setting worth comparing, next step)
+CAUSES: dict[str, tuple[str, str, str]] = {
+    "smc.outboxnotempty": (
+        "radio traffic (Wi-Fi/Bluetooth) arrived while asleep",
+        "tcpkeepalive, networkoversleep",
+        "Compare one night with Wi-Fi off; do not change settings from a single report.",
+    ),
+    "wifibt": (
+        "Wi-Fi/Bluetooth subsystem triggered the wake",
+        "tcpkeepalive, womp",
+        "Note connected accessories and compare a later night.",
+    ),
+    "arpt": (
+        "Wi-Fi access-point keepalive",
+        "tcpkeepalive, networkoversleep",
+        "Compare frequency before touching keepalive settings.",
+    ),
+    "rtc": (
+        "scheduled alarm/maintenance wake",
+        "powernap, scheduled events",
+        "Check `pmset -g sched` and Time Machine schedule; this is often expected.",
+    ),
+    "ec.rtc": (
+        "scheduled alarm/maintenance wake",
+        "powernap, scheduled events",
+        "Check `pmset -g sched` and Time Machine schedule; this is often expected.",
+    ),
+    "nub.spmisw3irq": (
+        "SleepService maintenance (system housekeeping)",
+        "powernap",
+        "Low-count maintenance wakes are normal; compare before changing powernap.",
+    ),
+    "spmi": (
+        "SleepService maintenance (system housekeeping)",
+        "powernap",
+        "Low-count maintenance wakes are normal; compare before changing powernap.",
+    ),
+    "ec.darkpme": (
+        "platform maintenance wake (DarkWake)",
+        "powernap, standby",
+        "Treat as housekeeping clue; compare counts across nights.",
+    ),
+    "ec.lidopen": (
+        "lid was opened",
+        "none",
+        "User action, not a fault.",
+    ),
+    "usb": (
+        "a USB device woke the Mac",
+        "none",
+        "Disconnect one USB device at a time and compare a later report.",
+    ),
+    "xhc": (
+        "a USB device woke the Mac",
+        "none",
+        "Disconnect one USB device at a time and compare a later report.",
+    ),
+    "magicwake": (
+        "Wake-on-LAN magic packet",
+        "womp",
+        "Only relevant on wired/elevated network setups; compare before changing womp.",
+    ),
+    "useractivity": (
+        "user input (keyboard/pointer)",
+        "none",
+        "User action, not a fault.",
+    ),
+    "hid activity": (
+        "user input (keyboard/pointer)",
+        "none",
+        "User action, not a fault.",
+    ),
+    "pwrbut": (
+        "power button pressed",
+        "none",
+        "User action, not a fault.",
+    ),
+}
+FALLBACK = (
+    "unrecognised code; intentionally not interpreted",
+    "none",
+    "Look the code up before changing any power setting.",
 )
 
 
@@ -38,34 +124,84 @@ def parse_assertions(text: str) -> list[dict[str, str]]:
     return found
 
 
-def parse_wakes(text: str) -> list[dict[str, object]]:
-    counts: collections.Counter[str] = collections.Counter()
+def explain(reason: str) -> tuple[str, str, str]:
+    lowered = reason.lower()
+    for key in sorted(CAUSES, key=len, reverse=True):
+        if lowered.startswith(key) or key in lowered:
+            return CAUSES[key]
+    return FALLBACK
+
+
+def parse_wakes(text: str) -> dict[str, object]:
+    """Collect wake events with timestamps; untimed lines are kept separately."""
+    untimed: collections.Counter[str] = collections.Counter()
+    events: list[tuple[dt.datetime, str]] = []
     for line in text.splitlines():
+        reason = None
         for pattern in WAKE_PATTERNS:
             match = pattern.search(line)
             if match:
                 reason = match.group(1).strip().rstrip(".")
-                if reason:
-                    counts[reason] += 1
                 break
-    return [{"reason": reason, "count": count} for reason, count in counts.most_common()]
+        if not reason:
+            continue
+        stamp = STAMP_RE.match(line)
+        if not stamp:
+            untimed[reason] += 1
+            continue
+        try:
+            moment = dt.datetime(int(stamp.group(1)[:4]), int(stamp.group(1)[5:7]),
+                                 int(stamp.group(1)[8:10]), int(stamp.group(2)),
+                                 int(stamp.group(3)), int(stamp.group(4)))
+        except ValueError:
+            untimed[reason] += 1
+            continue
+        events.append((moment, reason))
+    return {"events": events, "untimed": untimed}
 
 
-def guidance(reason: str) -> str:
-    lowered = reason.lower()
-    if any(word in lowered for word in ("bluetooth", "wifibt", "rtc", "network")):
-        return "Check Bluetooth/network wake settings and disconnect accessories one at a time."
-    if any(word in lowered for word in ("usb", "xhc", "xhci", "ec.usb")):
-        return "Disconnect one USB device at a time and compare a later report."
-    if "tcpkeepalive" in lowered or "maintenance" in lowered:
-        return "This may be scheduled maintenance; compare frequency before changing settings."
-    return "Treat this as a clue; correlate it with time, apps, and connected devices."
+def night_of(moment: dt.datetime) -> str:
+    """A wake before noon belongs to the previous calendar night."""
+    return (moment.date() - dt.timedelta(days=1 if moment.hour < 12 else 0)).isoformat()
+
+
+def summarise(parsed: dict[str, object], since_days: int) -> dict[str, object]:
+    events: list[tuple[dt.datetime, str]] = parsed["events"]  # type: ignore[assignment]
+    untimed: collections.Counter[str] = parsed["untimed"]  # type: ignore[assignment]
+    if events:
+        newest = max(moment for moment, _ in events)
+        cutoff = newest - dt.timedelta(days=since_days)
+        kept = [(moment, reason) for moment, reason in events if moment >= cutoff]
+    else:
+        kept = []
+    counts: collections.Counter[str] = collections.Counter(reason for _, reason in kept)
+    counts.update(untimed)
+    groups = []
+    for reason, count in counts.most_common():
+        cause, setting, step = explain(reason)
+        groups.append({"reason": reason, "count": count, "cause": cause,
+                       "candidate_setting": setting, "next_step": step})
+    nights: dict[str, list[dt.datetime]] = collections.defaultdict(list)
+    overnight = 0
+    for moment, _ in kept:
+        nights[night_of(moment)].append(moment)
+        if moment.hour >= 22 or moment.hour < 7:
+            overnight += 1
+    rows = [{"night": key, "events": len(value)} for key, value in sorted(nights.items())]
+    return {"groups": groups,
+            "window": {"window_days": since_days,
+                       "first": min(kept)[0].isoformat(timespec="minutes") if kept else None,
+                       "last": max(kept)[0].isoformat(timespec="minutes") if kept else None,
+                       "events": len(kept), "nights": rows, "overnight": overnight,
+                       "untimed": sum(untimed.values())}}
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Read-only macOS sleep and wake explainer")
     parser.add_argument("--assertions-file", help="parse saved pmset -g assertions output")
     parser.add_argument("--log-file", help="parse saved pmset -g log output")
+    parser.add_argument("--since", type=int, default=7, metavar="DAYS",
+                        help="only count wakes within DAYS of the newest event (default: 7)")
     parser.add_argument("--json", action="store_true", help="emit JSON")
     parser.add_argument("--version", action="version", version=f"whyawake {VERSION}")
     return parser.parse_args()
@@ -73,6 +209,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.since < 1:
+        print("whyawake: --since must be at least 1 day", file=sys.stderr)
+        return 2
     if platform.system() != "Darwin" and not (args.assertions_file or args.log_file):
         print("whyawake: live inspection requires macOS; use fixture file options", file=sys.stderr)
         return 2
@@ -83,24 +222,40 @@ def main() -> int:
         print(f"whyawake: cannot read input: {exc}", file=sys.stderr)
         return 2
     blockers = parse_assertions(assertion_text)
-    wakes = parse_wakes(log_text)
-    report = {"read_only": True, "sleep_blockers": blockers, "wake_reasons": wakes}
+    result = summarise(parse_wakes(log_text), args.since)
+    groups, window = result["groups"], result["window"]
+    report = {"version": VERSION, "read_only": True, "sleep_blockers": blockers,
+              "wake_reasons": groups, "window": window}
     if args.json:
         print(json.dumps(report, indent=2))
         return 0
-    print("WhyAwake (read-only)")
+    print(f"WhyAwake {VERSION} (read-only)")
     print(f"Active sleep blocker clues: {len(blockers)}")
     for item in blockers:
         print(f"- {item['process']} (pid {item['pid']}): {item['assertion']}")
     if not blockers:
         print("- No named process assertion found in the available output.")
-    print(f"Wake reason groups: {len(wakes)}")
-    for item in wakes:
+    print(f"Wake reason groups: {len(groups)}")
+    for item in groups:
         print(f"- {item['reason']} — {item['count']} event(s)")
-        print(f"  Next: {guidance(str(item['reason']))}")
-    if not wakes:
-        print("- No wake reason found in the available output.")
-    print("Nothing was changed. Clues are not proof of a faulty app or device.")
+        print(f"  Cause: {item['cause']}")
+        if item["candidate_setting"] != "none":
+            print(f"  Candidate setting to compare: {item['candidate_setting']} (not a verified cause)")
+        print(f"  Next: {item['next_step']}")
+    if window["events"]:
+        print(f"Window: last {window['window_days']} day(s) — {window['events']} event(s) "
+              f"from {window['first']} to {window['last']}")
+        print(f"Nights with wakes: {len(window['nights'])}")
+        for row in window["nights"]:
+            print(f"- night of {row['night']}: {row['events']} event(s)")
+        print(f"Overnight wakes (22:00-07:00): {window['overnight']}")
+    else:
+        print("No wake events found in the parsed input.")
+        print("- An empty result is expected when this Mac never sleeps "
+              "(`pmset -g` shows sleep 0), when the pmset log was rotated, "
+              "or when the window contains no wakes.")
+        print("- Empty output is not evidence that your Mac does not wake.")
+    print("Nothing was changed. Clues are not proof of a faulty app, device, or subsystem.")
     return 0
 
 

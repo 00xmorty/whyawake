@@ -1,4 +1,7 @@
-2026-08-28 01:00:01 +0200 Wake reason: EC.DarkPME (Maintenance)
-2026-08-28 02:10:02 +0200 Wake reason: EC.DarkPME (Maintenance)
-2026-08-28 03:20:03 +0200 Wake reason: XHC1
-2026-08-28 04:30:04 +0200 DarkWake from Normal Sleep [CDN] due to RTC/Maintenance
+2026-08-23 02:00:00 +0200 DarkWake from Normal Sleep [CDN] : due to NUB.SPMISw3IRQ
+2026-08-27 01:00:01 +0200 Wake reason: EC.DarkPME (Maintenance)
+2026-08-27 02:10:02 +0200 Wake reason: EC.DarkPME (Maintenance)
+2026-08-27 03:20:03 +0200 Wake reason: XHC1
+2026-08-27 06:30:04 +0200 DarkWake from Normal Sleep [CDN] due to RTC/Maintenance
+2026-08-27 23:41:10 +0200 DarkWake from Deep Idle [CDNP] : due to SMC.OutboxNotEmpty smc.70070000 wifibt wlan/ Using BATT
+2026-08-28 04:30:04 +0200 Wake reason: EC.RTC (Alarm)
